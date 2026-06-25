@@ -8,6 +8,7 @@ import random
 import plotly.express as px
 
 # --- CẤU HÌNH API HỆ THỐNG PHÂN TÍCH (SỬ DỤNG GEMINI 2.5 FLASH) ---
+# Sử dụng chính xác model gemini-2.5-flash theo yêu cầu cấu hình bắt buộc
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "KEY_MẶC_ĐỊNH_NẾU_CHẠY_LOCAL") 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -115,6 +116,7 @@ if "native_lang" not in st.session_state:
 if "target_lang" not in st.session_state:
     st.session_state.target_lang = "English (Tiếng Anh)"
 
+# Khởi tạo giá trị ban đầu cho T trước hệ thống Auth
 T = LANG_DICT[st.session_state.native_lang]
 
 def Auth_System():
@@ -126,16 +128,17 @@ def Auth_System():
     if st.session_state.authenticated:
         return True
 
-    st.title(T["auth_title"])
+    st.title(LANG_DICT[st.session_state.native_lang]["auth_title"])
     st.session_state.native_lang = st.selectbox("🌐 Ngôn ngữ hệ thống (System Language):", ["Tiếng Việt", "English"])
     
-    tab_login, tab_register = st.tabs([T["login"], T["register"]])
+    current_T = LANG_DICT[st.session_state.native_lang]
+    tab_login, tab_register = st.tabs([current_T["login"], current_T["register"]])
     users_db = load_users()
 
     with tab_login:
-        login_user = st.text_input(T["username"], key="login_username").strip()
-        login_pass = st.text_input(T["password"], type="password", key="login_password").strip()
-        if st.button(T["btn_login"]):
+        login_user = st.text_input(current_T["username"], key="login_username").strip()
+        login_pass = st.text_input(current_T["password"], type="password", key="login_password").strip()
+        if st.button(current_T["btn_login"]):
             if login_user in users_db and users_db[login_user] == login_pass:
                 st.session_state.authenticated = True
                 st.session_state.current_user = login_user
@@ -144,10 +147,10 @@ def Auth_System():
                 st.error("❌ Invalid Username or Password!")
 
     with tab_register:
-        reg_user = st.text_input(T["username"], key="reg_username").strip()
-        reg_pass = st.text_input(T["password"], type="password", key="reg_password").strip()
-        reg_pass_confirm = st.text_input(T["confirm_pass"], type="password", key="reg_password_confirm").strip()
-        if st.button(T["btn_reg"]):
+        reg_user = st.text_input(current_T["username"], key="reg_username").strip()
+        reg_pass = st.text_input(current_T["password"], type="password", key="reg_password").strip()
+        reg_pass_confirm = st.text_input(current_T["confirm_pass"], type="password", key="reg_password_confirm").strip()
+        if st.button(current_T["btn_reg"]):
             if not reg_user or not reg_pass:
                 st.error("❌ Please fill all fields!")
             elif reg_user in users_db:
@@ -181,14 +184,15 @@ with st.sidebar:
     st.metric(label="✨ Điểm tích lũy hệ thống (GP)", value=f"{user_gp} đ")
     
     st.write("---")
-    if st.button(T["logout"]):
+    if st.button(LANG_DICT[st.session_state.native_lang]["logout"]):
         st.session_state.authenticated = False
         st.session_state.current_user = None
         st.rerun()
 
+# CẬP NHẬT LẠI BIẾN T NGAY TẠI ĐÂY ĐỂ ĐỒNG BỘ TIÊU ĐỀ TAB VỚI SIDEBAR CHÍNH XÁC
 T = LANG_DICT[st.session_state.native_lang]
 
-# Thứ tự cấu trúc Tab đồng bộ hoàn toàn
+# Thiết lập cấu trúc phân tab đồng bộ thứ tự hoàn chỉnh
 tab1, tab2, tab4, tab3 = st.tabs([T["tab_add"], T["tab_review"], T["tab_dashboard"], T["tab_guide"]])
 
 def clean_html_for_radio(text):
@@ -196,7 +200,7 @@ def clean_html_for_radio(text):
     clean_text = re.sub(r'<[^>]+>', '', text)
     return clean_text.replace("**", "")
 
-# --- CẬP NHẬT: HÀM PHÂN TÍCH AN TOÀN, CHỐNG LỖI ĐỊNH DẠNG JSON VÀ KHÓA BOT ---
+# --- HÀM PHÂN TÍCH CHỐNG LỖI ĐỊNH DẠNG JSON (SỬ DỤNG MODEL 2.5 FLASH) ---
 def analyze_article_with_gemini(url):
     prompt = f"""
     Hãy phân tích văn bản từ liên kết: {url}.
@@ -225,3 +229,239 @@ def analyze_article_with_gemini(url):
     except Exception as e:
         st.error(f"Xử lý thất bại: {e}")
         return None
+
+# --- TAB 1: TRÍCH XUẤT TỰ ĐỘNG ---
+with tab1:
+    st.header(T["url_label"])
+    url_input = st.text_input("", placeholder="https://...", key="url_text_field")
+    
+    if st.button(T["btn_analyze"]):
+        if url_input:
+            with st.spinner("Đang chạy phân tích cú pháp dữ liệu bài viết..."):
+                words_list = analyze_article_with_gemini(url_input)
+                if words_list:
+                    st.success("Hệ thống trích xuất và đồng bộ dữ liệu thành công!")
+                    today = str(datetime.date.today())
+                    for item in words_list:
+                        w_key = f"{st.session_state.current_user}_{st.session_state.target_lang}_{item['word'].lower()}"
+                        if w_key not in st.session_state.vocab_db:
+                            st.session_state.vocab_db[w_key] = {
+                                "user": st.session_state.current_user,
+                                "target_lang": st.session_state.target_lang,
+                                "word": item['word'],
+                                "meaning": item['meaning'],
+                                "context": item['context'],
+                                "box_level": 1,
+                                "next_review": today
+                            }
+                    save_vocab_data(st.session_state.vocab_db)
+                    st.rerun()
+
+    st.subheader(T["my_vocab"] + f" ({st.session_state.target_lang})")
+    user_words = [
+        v for v in st.session_state.vocab_db.values() 
+        if v.get("user") == st.session_state.current_user and v.get("target_lang") == st.session_state.target_lang
+    ]
+    if user_words:
+        df = pd.DataFrame(user_words)
+        st.write(df[["word", "meaning", "box_level", "next_review"]].to_html(escape=False, index=False), unsafe_allow_html=True)
+    else:
+        st.info(T["no_vocab"])
+
+# --- TAB 2: ÔN TẬP NGẮT QUÃNG TRẮC NGHIỆM ---
+with tab2:
+    st.header(T["review_today"] + f" ({st.session_state.target_lang})")
+    today_str = str(datetime.date.today())
+    
+    all_user_words = [
+        v for v in st.session_state.vocab_db.values() 
+        if v.get("user") == st.session_state.current_user and v.get("target_lang") == st.session_state.target_lang
+    ]
+    
+    review_list = [v for v in all_user_words if v["next_review"] <= today_str]
+    
+    if not review_list:
+        st.success(T["review_done"])
+    else:
+        st.warning(T["review_count"].format(len(review_list)))
+        current_word = review_list[0]
+        w_key = f"{st.session_state.current_user}_{st.session_state.target_lang}_{current_word['word'].lower()}"
+        
+        st.info(f"💡 **Ngữ cảnh thực tế:** {current_word['context']}")
+        st.markdown(f"### Thuật ngữ cần định nghĩa: `{current_word['word']}`")
+        st.write("---")
+        
+        if "quiz_word" not in st.session_state or st.session_state.quiz_word != current_word['word']:
+            st.session_state.quiz_word = current_word['word']
+            st.session_state.answered = False
+            st.session_state.submit_clicked = False
+            
+            correct_meaning = current_word['meaning']
+            wrong_meanings = [w['meaning'] for w in all_user_words if w['word'] != current_word['word']]
+            wrong_meanings = list(set(wrong_meanings))
+            
+            # Đảm bảo danh sách lựa chọn sai hợp lệ
+            wrong_options = random.sample(wrong_meanings, min(len(wrong_meanings), 3))
+            
+            options = wrong_options + [correct_meaning]
+            random.shuffle(options)
+            st.session_state.quiz_options = options
+
+        display_options_map = {clean_html_for_radio(opt): opt for opt in st.session_state.quiz_options}
+        
+        chosen_clean = st.radio(
+            "Lựa chọn phương án khớp nghĩa chính xác nhất:", 
+            list(display_options_map.keys()), 
+            index=0,
+            disabled=st.session_state.submit_clicked
+        )
+        
+        selected_origin_meaning = display_options_map[chosen_clean]
+
+        if st.button("Xác nhận kiểm tra phương án", disabled=st.session_state.submit_clicked):
+            st.session_state.submit_clicked = True
+            if selected_origin_meaning == current_word['meaning']:
+                st.session_state.answered = True
+            else:
+                st.session_state.answered = False
+
+        if st.session_state.submit_clicked:
+            if st.session_state.answered:
+                st.success("🎉 CHÍNH XÁC!")
+                st.write("Định nghĩa gốc của hệ thống: ", unsafe_allow_html=True)
+                st.write(current_word['meaning'], unsafe_allow_html=True)
+                
+                if st.button("🟢 Tiếp tục lịch trình (Tăng mức độ lưu trữ)"):
+                    current_level = current_word['box_level']
+                    next_level = min(current_level + 1, 3)
+                    days_gap = 1 if next_level == 1 else (3 if next_level == 2 else 7)
+                    
+                    st.session_state.vocab_db[w_key]['box_level'] = next_level
+                    st.session_state.vocab_db[w_key]['next_review'] = str(datetime.date.today() + datetime.timedelta(days=days_gap))
+                    save_vocab_data(st.session_state.vocab_db)
+                    
+                    if "quiz_word" in st.session_state:
+                        del st.session_state.quiz_word
+                    st.rerun()
+            else:
+                st.error("❌ PHƯƠNG ÁN CHƯA CHÍNH XÁC!")
+                st.write("Định nghĩa gốc đúng của hệ thống: ", unsafe_allow_html=True)
+                st.write(current_word['meaning'], unsafe_allow_html=True)
+                
+                if st.button("🔴 Tiếp tục lịch trình (Đặt lại chu kỳ cơ bản)"):
+                    st.session_state.vocab_db[w_key]['box_level'] = 1
+                    st.session_state.vocab_db[w_key]['next_review'] = str(datetime.date.today() + datetime.timedelta(days=1))
+                    save_vocab_data(st.session_state.vocab_db)
+                    
+                    if "quiz_word" in st.session_state:
+                        del st.session_state.quiz_word
+                    st.rerun()
+
+# --- TAB 4: TRUNG TÂM CHỈ HUY (DASHBOARD) ---
+with tab4:
+    st.header("📊 Trung tâm Chỉ huy Bộ nhớ")
+    
+    user_all_data = [v for v in st.session_state.vocab_db.values() if v.get("user") == st.session_state.current_user]
+    
+    if not user_all_data:
+        st.info("Chưa có đủ dữ liệu để phân tích xu hướng. Hãy trích xuất thêm từ vựng!")
+    else:
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.subheader("🧠 Tỷ lệ phân bổ Hộp trí nhớ")
+            df_box = pd.DataFrame(user_all_data)
+            df_counts = df_box['box_level'].value_counts().reset_index()
+            df_counts.columns = ['Hộp lưu trữ', 'Số lượng từ']
+            df_counts['Hộp lưu trữ'] = df_counts['Hộp lưu trữ'].apply(lambda x: f"Hộp {x}")
+            
+            fig_pie = px.pie(
+                df_counts, 
+                values='Số lượng từ', 
+                names='Hộp lưu trữ', 
+                color_discrete_sequence=px.colors.sequential.Plasma,
+                hole=0.3
+            )
+            fig_pie.update_layout(margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", y=-0.1))
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+        with col2:
+            st.subheader("🔥 Ma trận Lịch nhiệt học tập (30 ngày gần đây)")
+            
+            end_date = datetime.date.today()
+            start_date = end_date - datetime.timedelta(days=29)
+            date_range = [start_date + datetime.timedelta(days=i) for i in range(30)]
+            
+            date_counts = {str(d): 0 for d in date_range}
+            for v in user_all_data:
+                nr_date = v.get("next_review")
+                if nr_date in date_counts:
+                    date_counts[nr_date] += 1
+            
+            grid_data = list(date_counts.items())
+            
+            st.caption("Mức độ dày đặc của từ vựng phân phối theo ngày (Màu đậm hơn = Nhiều từ cần xử lý hơn):")
+            
+            html_grid = "<div style='display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; max-width: 500px;'>"
+            for d_str, count in grid_data:
+                if count == 0:
+                    bg_color = "#ebedf0"
+                    text_color = "#000000"
+                elif count <= 2:
+                    bg_color = "#9be9a8"
+                    text_color = "#000000"
+                elif count <= 4:
+                    bg_color = "#40c463"
+                    text_color = "#ffffff"
+                else:
+                    bg_color = "#216e39"
+                    text_color = "#ffffff"
+                
+                day_display = d_str.split("-")[2]
+                
+                cell_html = (
+                    f"<div style='background-color: {bg_color}; color: {text_color}; padding: 12px; "
+                    f"text-align: center; border-radius: 4px; font-weight: bold; font-size: 14px;' title='Ngày {d_str}: {count} từ'>"
+                    f"{day_display}"
+                    f"<div style='font-size: 9px; font-weight: normal; opacity: 0.8;'>{count} từ</div>"
+                    f"</div>"
+                )
+                html_grid += cell_html
+                
+            html_grid += "</div>"
+            st.write(html_grid, unsafe_allow_html=True)
+            st.write("")
+            
+        st.write("---")
+        st.subheader("📈 Chỉ số tăng trưởng vựng ngữ")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Tổng số từ đã nạp", f"{len(user_all_data)} từ")
+        m2.metric("Số từ đã đạt Hộp 3 (Master)", f"{len(df_box[df_box['box_level'] == 3]) if 'box_level' in df_box.columns else 0} từ")
+        m3.metric("Hiệu suất bộ nhớ trung bình", f"{round((user_gp / (len(user_all_data) * 3)) * 100, 1) if user_all_data else 0} %")
+
+# --- TAB 3: HƯỚNG DẪN SỬ DỤNG ---
+with tab3:
+    st.header("📖 Hướng dẫn vận hành Cơ sở Hệ thống Ngắt quãng MyWords")
+    st.markdown("""
+    Chào mừng bạn đến với môi trường lưu trữ và kiểm soát vựng ngữ ứng dụng cơ chế ngắt quãng tự động hóa kết hợp thang đo kiểm chuẩn năng lực!
+    
+    ### 1. Quy trình vận hành cốt lõi
+    * **Bước 1:** Cấu hình **Mục tiêu ngôn ngữ học** tại thanh điều khiển trái (Tiếng Anh, Tiếng Trung...).
+    * **Bước 2:** Truy cập các cổng thông tin báo chí uy tín được liên kết phía dưới, sao chép (Copy) đường dẫn URL của bài viết cần nghiên cứu.
+    * **Bước 3:** Tại phân hệ **Trích xuất từ vựng mới**, dán liên kết vào ô nhập liệu và chạy lệnh. Hệ thống máy chủ sẽ tự động bóc tách từ khóa, <span style='color:green'>**in đậm tô xanh**</span> nghĩa gốc chuẩn xác nhất.
+    * **Bước 4:** Định kỳ truy cập phân hệ **Ôn tập dữ liệu ngắt quãng** hàng ngày để làm bài trắc nghiệm tự động kiểm chuẩn chu kỳ trí nhớ.
+
+    ### 2. Danh sách cổng thông tin kiểm thử tiêu biểu (Bấm để lấy liên kết bài viết)
+    * 📰 **[BBC News](https://www.bbc.com/news)** – Cổng tin tức quốc tế, hệ thống từ vựng chính luận chuẩn cấu trúc.
+    * 📰 **[CNN International](https://edition.cnn.com)** – Tin tức thời sự cập nhật liên tục về công nghệ, đời sống xã hội.
+    * 📰 **[Xinhua Net (Tân Hoa Xã)](http://www.xinhuanet.com)** – Cơ quan báo chí chính thống, từ vựng chuẩn xã hội và kinh tế thương mại.
+    * 📰 **[NHK News Web Easy](https://www3.nhk.or.jp/news/easy/)** – **Nguồn ngữ liệu chuẩn tối ưu.** Văn bản được tinh giản cấu trúc sạch giúp hệ thống phân tích đạt độ chính xác tuyệt đối.
+
+    ---
+
+    ### 3. Thang đo kiểm chuẩn năng lực và Hệ thống cấp bậc (Gamify)
+    Thuật toán tự động phân bổ bản ghi từ vựng vào các phân vùng lưu trữ (Hộp bộ nhớ - Box Level) từ 1 đến 3. Chỉ số phân vùng tỷ lệ thuận với độ bền vững thông tin trong bộ nhớ:
+    * **Phân vùng Hộp 1:** Ghi nhận **1 điểm GP** (Hệ thống xếp lịch kiểm tra lại vào chu kỳ ngày kế tiếp).
+    * **Phân vùng Hộp 2:** Ghi nhận **2 điểm GP** (Hệ thống ngắt quãng tự động và kiểm tra lại sau 3 ngày).
+    * **Phân vùng Hộp 3:** Ghi nhận **3 điểm GP** (Độ thuộc bài sâu, hệ thống ngắt quãng kéo dài 7 ngày).
+    """, unsafe_allow_html=True)
