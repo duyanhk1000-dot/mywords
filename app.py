@@ -357,7 +357,6 @@ with tab4:
             df_counts.columns = ['Hộp lưu trữ', 'Số lượng từ']
             df_counts['Hộp lưu trữ'] = df_counts['Hộp lưu trữ'].apply(lambda x: f"Hộp {x}")
             
-            # ĐÃ CHỈNH SỬA: Thay thế mã màu Plotlyshades bị lỗi thành bộ màu Plasma chuẩn 100%
             fig_pie = px.pie(
                 df_counts, 
                 values='Số lượng từ', 
@@ -385,6 +384,7 @@ with tab4:
             
             st.caption("Mức độ dày đặc của từ vựng phân phối theo ngày (Màu đậm hơn = Nhiều từ cần xử lý hơn):")
             
+            # --- FIX LỖI TẠI ĐÂY: Chuẩn hóa Container Grid và xử lý nối chuỗi HTML an toàn ---
             html_grid = "<div style='display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; max-width: 500px;'>"
             for d_str, count in grid_data:
                 if count == 0:
@@ -401,12 +401,17 @@ with tab4:
                     text_color = "#ffffff"
                 
                 day_display = d_str.split("-")[2]
-                html_grid += f"""
-                <div style='background-color: {bg_color}; color: {text_color}; padding: 12px; text-align: center; border-radius: 4px; font-weight: bold; font-size: 14px;' title='Ngày {d_str}: {count} từ'>
-                    {day_display}
-                    <div style='font-size: 9px; font-weight: normal; opacity: 0.8;'>{count} từ</div>
-                </div>
-                """
+                
+                # Tạo chuỗi HTML con cho từng ô một cách mạch lạc
+                cell_html = (
+                    f"<div style='background-color: {bg_color}; color: {text_color}; padding: 12px; "
+                    f"text-align: center; border-radius: 4px; font-weight: bold; font-size: 14px;' title='Ngày {d_str}: {count} từ'>"
+                    f"{day_display}"
+                    f"<div style='font-size: 9px; font-weight: normal; opacity: 0.8;'>{count} từ</div>"
+                    f"</div>"
+                )
+                html_grid += cell_html
+                
             html_grid += "</div>"
             st.write(html_grid, unsafe_allow_html=True)
             st.write("")
@@ -417,6 +422,9 @@ with tab4:
         m1.metric("Tổng số từ đã nạp", f"{len(user_all_data)} từ")
         m2.metric("Số từ đã đạt Hộp 3 (Master)", f"{len(df_box[df_box['box_level'] == 3]) if 'box_level' in df_box.columns else 0} từ")
         m3.metric("Hiệu suất bộ nhớ trung bình", f"{round((user_gp / (len(user_all_data) * 3)) * 100, 1) if user_all_data else 0} %")
+
+
+
 
 # --- TAB 3: HƯỚNG DẪN SỬ DỤNG ---
 with tab3:
