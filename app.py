@@ -5,6 +5,7 @@ import datetime
 import os
 import json
 import random
+import plotly.express as px
 
 # --- CẤU HÌNH API HỆ THỐNG PHÂN TÍCH ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "KEY_MẶC_ĐỊNH_NẾU_CHẠY_LOCAL") 
@@ -57,7 +58,7 @@ def calculate_user_score(username, db):
             score += int(v.get("box_level", 1))
     return score
 
-# --- TỪ ĐIỂN NGÔN NGỮ GIAO DIỆN (ĐÃ GIẤU VẾT AI) ---
+# --- TỪ ĐIỂN NGÔN NGỮ GIAO DIỆN ---
 LANG_DICT = {
     "Tiếng Việt": {
         "auth_title": "🔐 HỆ THỐNG XÁC THỰC THÀNH VIÊN",
@@ -71,6 +72,7 @@ LANG_DICT = {
         "logout": "Đăng xuất tài khoản",
         "tab_add": "📥 Trích xuất từ vựng mới",
         "tab_review": "🧠 Ôn tập dữ liệu ngắt quãng",
+        "tab_dashboard": "📊 Trung tâm Chỉ huy",
         "tab_guide": "📖 Cẩm nang vận hành",
         "url_label": "Nhập liên kết bài viết nguồn (URL):",
         "btn_analyze": "Kích hoạt thuật toán trích xuất tự động",
@@ -94,6 +96,7 @@ LANG_DICT = {
         "logout": "Logout Account",
         "tab_add": "📥 Extract Vocabulary",
         "tab_review": "🧠 Spaced Repetition Review",
+        "tab_dashboard": "📊 Command Dashboard",
         "tab_guide": "📖 User Guide",
         "url_label": "Enter Source Article URL:",
         "btn_analyze": "Execute Automated Extraction Algorithm",
@@ -185,7 +188,8 @@ with st.sidebar:
 
 T = LANG_DICT[st.session_state.native_lang]
 
-tab1, tab2, tab3 = st.tabs([T["tab_add"], T["tab_review"], T["tab_guide"]])
+# Đã bổ sung tab_dashboard vào cấu trúc phân mảnh tab
+tab1, tab2, tab4, tab3 = st.tabs([T["tab_add"], T["tab_review"], T["tab_dashboard"], T["tab_guide"]])
 
 def clean_html_for_radio(text):
     import re
@@ -193,7 +197,6 @@ def clean_html_for_radio(text):
     return clean_text.replace("**", "")
 
 def analyze_article_with_gemini(url):
-    # Prompt ngầm ẩn giấu hoàn toàn danh tính kết quả trả về
     prompt = f"""
     Hãy phân tích văn bản từ liên kết: {url}.
     Mục tiêu: Người đọc có ngôn ngữ nền là '{st.session_state.native_lang}' và đang nghiên cứu '{st.session_state.target_lang}'.
@@ -336,6 +339,94 @@ with tab2:
                         del st.session_state.quiz_word
                     st.rerun()
 
+# --- TAB 4: TRUNG TÂM CHỈ HUY (DASHBOARD) ---
+with tab4:
+    st.header("📊 Trung tâm Chỉ huy Bộ nhớ")
+    
+    # Lấy toàn bộ từ của user hiện tại
+    user_all_data = [v for v in st.session_state.vocab_db.values() if v.get("user") == st.session_state.current_user]
+    
+    if not user_all_data:
+        st.info("Chưa có đủ dữ liệu để phân tích xu hướng. Hãy trích xuất thêm từ vựng!")
+    else:
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.subheader("🧠 Tỷ lệ phân bổ Hộp trí nhớ")
+            # Tạo DataFrame đếm số lượng từ ở mỗi Box
+            df_box = pd.DataFrame(user_all_data)
+            df_counts = df_box['box_level'].value_counts().reset_index()
+            df_counts.columns = ['Hộp lưu trữ', 'Số lượng từ']
+            df_counts['Hộp lưu trữ'] = df_counts['Hộp lưu trữ'].apply(lambda x: f"Hộp {x}")
+            
+            # Vẽ biểu đồ tròn bằng Plotly
+            fig_pie = px.pie(
+                df_counts, 
+                values='Số lượng từ', 
+                names='Hộp lưu trữ', 
+                color_discrete_sequence=px.colors.sequential.Plotlyshades,
+                hole=0.3
+            )
+            fig_pie.update_layout(margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", y=-0.1))
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+        with col2:
+            st.subheader("🔥 Ma trận Lịch nhiệt học tập (30 ngày gần đây)")
+            
+            # Thiết lập danh sách 30 ngày gần đây
+            end_date = datetime.date.today()
+            start_date = end_date - datetime.timedelta(days=29)
+            date_range = [start_date + datetime.timedelta(days=i) for i in range(30)]
+            
+            # Đếm số lượng từ thuộc các mốc ngày trong database
+            date_counts = {str(d): 0 for d in date_range}
+            for v in user_all_data:
+                nr_date = v.get("next_review")
+                if nr_date in date_counts:
+                    date_counts[nr_date] += 1
+            
+            # Tạo lưới dữ liệu Heatmap dạng 5 hàng x 6 cột để hiển thị gọn
+            grid_data = list(date_counts.items())
+            
+            # Vẽ giao diện các ô vuông kiểu GitHub bằng cấu trúc cột HTML/Markdown của Streamlit
+            st.caption("Mức độ dày đặc của từ vựng phân phối theo ngày (Màu đậm hơn = Nhiều từ cần xử lý hơn):")
+            
+            # Tạo HTML cho Grid ô vuông
+            html_grid = "<div style='display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; max-width: 500px;'>"
+            for d_str, count in grid_data:
+                # Đổi màu ô dựa theo số lượng từ
+                if count == 0:
+                    bg_color = "#ebedf0" # Xám trống
+                    text_color = "#000000"
+                elif count <= 2:
+                    bg_color = "#9be9a8" # Xanh nhạt
+                    text_color = "#000000"
+                elif count <= 4:
+                    bg_color = "#40c463" # Xanh vừa
+                    text_color = "#ffffff"
+                else:
+                    bg_color = "#216e39" # Xanh đậm dữ dội
+                    text_color = "#ffffff"
+                
+                day_display = d_str.split("-")[2] # Chỉ lấy số ngày
+                html_grid += f"""
+                <div style='background-color: {bg_color}; color: {text_color}; padding: 12px; text-align: center; border-radius: 4px; font-weight: bold; font-size: 14px;' title='Ngày {d_str}: {count} từ'>
+                    {day_display}
+                    <div style='font-size: 9px; font-weight: normal; opacity: 0.8;'>{count} từ</div>
+                </div>
+                """
+            html_grid += "</div>"
+            st.write(html_grid, unsafe_allow_html=True)
+            st.write("")
+            
+        # Thống kê tổng quan dạng thẻ số Metric
+        st.write("---")
+        st.subheader("📈 Chỉ số tăng trưởng vựng ngữ")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Tổng số từ đã nạp", f"{len(user_all_data)} từ")
+        m2.metric("Số từ đã đạt Hộp 3 (Master)", f"{len(df_box[df_box['box_level'] == 3]) if 'box_level' in df_box.columns else 0} từ")
+        m3.metric("Hiệu suất bộ nhớ trung bình", f"{round((user_gp / (len(user_all_data) * 3)) * 100, 1) if user_all_data else 0} %")
+
 # --- TAB 3: HƯỚNG DẪN SỬ DỤNG ---
 with tab3:
     st.header("📖 Hướng dẫn vận hành Cơ sở Hệ thống Ngắt quãng MyWords")
@@ -349,19 +440,10 @@ with tab3:
     * **Bước 4:** Định kỳ truy cập phân hệ **Ôn tập dữ liệu ngắt quãng** hàng ngày để làm bài trắc nghiệm tự động kiểm chuẩn chu kỳ trí nhớ.
 
     ### 2. Danh sách cổng thông tin kiểm thử tiêu biểu (Bấm để lấy liên kết bài viết)
-    
-    #### 🇬🇧 Tiếng Anh (English)
     * 📰 **[BBC News](https://www.bbc.com/news)** – Cổng tin tức quốc tế, hệ thống từ vựng chính luận chuẩn cấu trúc.
     * 📰 **[CNN International](https://edition.cnn.com)** – Tin tức thời sự cập nhật liên tục về công nghệ, đời sống xã hội.
-    
-    #### 🇨🇳 Tiếng Trung (Chinese)
     * 📰 **[Xinhua Net (Tân Hoa Xã)](http://www.xinhuanet.com)** – Cơ quan báo chí chính thống, từ vựng chuẩn xã hội và kinh tế thương mại.
-    * 📰 **[People's Daily (Nhân dân Nhật báo)](http://chinese.people.com.cn)** – Tài liệu ngữ pháp nâng cao chuyên sâu.
-    * 📰 **[BBC News 中文](https://www.bbc.com/zhongwen/simp)** – Hệ thống tin tức đa ngôn ngữ hỗ trợ đối chiếu thực tế.
-    
-    #### 🇯🇵 Tiếng Nhật (Japanese)
     * 📰 **[NHK News Web Easy](https://www3.nhk.or.jp/news/easy/)** – **Nguồn ngữ liệu chuẩn tối ưu.** Văn bản được tinh giản cấu trúc sạch giúp hệ thống phân tích đạt độ chính xác tuyệt đối.
-    * 📰 **[The Asahi Shimbun (朝日新聞)](https://www.asahi.com)** – Nhật báo quy mô lớn phục vụ phân tích dịch thuật nâng cao.
 
     ---
 
@@ -370,6 +452,4 @@ with tab3:
     * **Phân vùng Hộp 1:** Ghi nhận **1 điểm GP** (Hệ thống xếp lịch kiểm tra lại vào chu kỳ ngày kế tiếp).
     * **Phân vùng Hộp 2:** Ghi nhận **2 điểm GP** (Hệ thống ngắt quãng tự động và kiểm tra lại sau 3 ngày).
     * **Phân vùng Hộp 3:** Ghi nhận **3 điểm GP** (Độ thuộc bài sâu, hệ thống ngắt quãng kéo dài 7 ngày).
-
-    > 💡 **Chiến lược thăng hạng chỉ số:** Duy trì kiểm tra đúng hạn mỗi ngày. Các phương án phản hồi chính xác sẽ nâng cấp phân vùng dữ liệu lên hộp cao hơn, nhân đôi hoặc nhân ba điểm GP năng lực của tài khoản, giúp thăng cấp bậc tự động từ danh hiệu **Gà Con**, tiến hóa lên **Búa Đá**, **Rìu Bạc**, cho đến các cấp bậc **Trượng Kim Cương** tối cao! Mọi phản hồi chưa chính xác sẽ kích hoạt lệnh đưa bản ghi về phân vùng Hộp 1 để thiết lập lại chu kỳ học.
     """, unsafe_allow_html=True)
