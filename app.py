@@ -225,5 +225,3 @@ def analyze_article_with_gemini(url):
     except Exception as e:
         st.error(f"Xử lý thất bại: {e}")
         return None
-            
-        if not text_data:
