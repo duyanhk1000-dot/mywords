@@ -215,3 +215,15 @@ def analyze_article_with_gemini(url):
             text_data = text_data.replace("```json", "").replace("```", "").strip()
             
         if not text_data:
+            st.error("⚠️ Phản hồi trống. Trang web này có cấu trúc bảo mật chặn phân tích tự động.")
+            return None
+            
+        return json.loads(text_data)
+    except json.JSONDecodeError:
+        st.error("⚠️ Định dạng phản hồi lỗi. Link bài viết có thể đã chặn Bot cào dữ liệu đám mây. Hãy thử một bài báo khác!")
+        return None
+    except Exception as e:
+        st.error(f"Xử lý thất bại: {e}")
+        return None
+            
+        if not text_data:
