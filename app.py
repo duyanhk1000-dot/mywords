@@ -206,17 +206,20 @@ def analyze_article_with_gemini(url):
     Hãy phân tích văn bản từ liên kết: {url}.
     Mục tiêu: Người đọc có ngôn ngữ nền là '{st.session_state.native_lang}' và đang nghiên cứu '{st.session_state.target_lang}'.
     Lọc ra đúng 5 từ khóa cốt lõi thuộc hệ ngôn ngữ '{st.session_state.target_lang}' trong bài viết.
-    Trả về cấu trúc mảng JSON thuần túy (không bọc trong khối markdown ```json), gồm các đối tượng có cấu trúc trường bắt buộc:
+    Trả về cấu trúc mảng JSON gồm các đối tượng có cấu trúc trường bắt buộc:
     - "word": Từ vựng
     - "meaning": Định nghĩa bằng ngôn ngữ '{st.session_state.native_lang}'. Định dạng bắt buộc: Từ dịch nghĩa chính yếu nhất phải được bọc trong thẻ html này: <span style='color:green'>**từ_chính**</span>. Các thành phần diễn giải ngữ cảnh mở rộng (nếu có) viết chữ thường bên ngoài thẻ.
     - "context": Câu văn mẫu trích từ bài viết hoặc tương đương sử dụng hệ chữ '{st.session_state.target_lang}'.
     """
     try:
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        # Ép cấu hình phản hồi bắt buộc đầu ra là JSON để loại bỏ hoàn toàn markdown bọc ngoài
+        config = {"response_mime_type": "application/json"}
+        response = client.models.generate_content(
+            model='gemini-2.5-flash', 
+            contents=prompt,
+            config=config
+        )
         text_data = response.text.strip()
-        
-        if text_data.startswith("```"):
-            text_data = text_data.replace("```json", "").replace("```", "").strip()
             
         if not text_data:
             st.error("⚠️ Phản hồi trống. Trang web này có cấu trúc bảo mật chặn phân tích tự động.")
@@ -224,6 +227,15 @@ def analyze_article_with_gemini(url):
             
         return json.loads(text_data)
     except json.JSONDecodeError:
+        # Nếu mô hình vô tình trả lỗi cú pháp, làm sạch chuỗi dự phòng bằng thủ thuật cắt chuỗi
+        try:
+            start_idx = text_data.find("[")
+            end_idx = text_data.rfind("]") + 1
+            if start_idx != -1 and end_idx != 0:
+                clean_json = text_data[start_idx:end_idx]
+                return json.loads(clean_json)
+        except:
+            pass
         st.error("⚠️ Định dạng phản hồi lỗi. Link bài viết có thể đã chặn Bot cào dữ liệu đám mây. Hãy thử một bài báo khác!")
         return None
     except Exception as e:
