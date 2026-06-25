@@ -188,7 +188,7 @@ with st.sidebar:
 
 T = LANG_DICT[st.session_state.native_lang]
 
-# Đã bổ sung tab_dashboard vào cấu trúc phân mảnh tab
+# Đã chuẩn hóa thứ tự biến nhận diện tab trùng với thứ tự mảng tiêu đề
 tab1, tab2, tab4, tab3 = st.tabs([T["tab_add"], T["tab_review"], T["tab_dashboard"], T["tab_guide"]])
 
 def clean_html_for_radio(text):
@@ -343,7 +343,6 @@ with tab2:
 with tab4:
     st.header("📊 Trung tâm Chỉ huy Bộ nhớ")
     
-    # Lấy toàn bộ từ của user hiện tại
     user_all_data = [v for v in st.session_state.vocab_db.values() if v.get("user") == st.session_state.current_user]
     
     if not user_all_data:
@@ -353,18 +352,17 @@ with tab4:
         
         with col1:
             st.subheader("🧠 Tỷ lệ phân bổ Hộp trí nhớ")
-            # Tạo DataFrame đếm số lượng từ ở mỗi Box
             df_box = pd.DataFrame(user_all_data)
             df_counts = df_box['box_level'].value_counts().reset_index()
             df_counts.columns = ['Hộp lưu trữ', 'Số lượng từ']
             df_counts['Hộp lưu trữ'] = df_counts['Hộp lưu trữ'].apply(lambda x: f"Hộp {x}")
             
-            # Vẽ biểu đồ tròn bằng Plotly
+            # ĐÃ CHỈNH SỬA: Thay thế mã màu Plotlyshades bị lỗi thành bộ màu Plasma chuẩn 100%
             fig_pie = px.pie(
                 df_counts, 
                 values='Số lượng từ', 
                 names='Hộp lưu trữ', 
-                color_discrete_sequence=px.colors.sequential.Plotlyshades,
+                color_discrete_sequence=px.colors.sequential.Plasma,
                 hole=0.3
             )
             fig_pie.update_layout(margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", y=-0.1))
@@ -373,42 +371,36 @@ with tab4:
         with col2:
             st.subheader("🔥 Ma trận Lịch nhiệt học tập (30 ngày gần đây)")
             
-            # Thiết lập danh sách 30 ngày gần đây
             end_date = datetime.date.today()
             start_date = end_date - datetime.timedelta(days=29)
             date_range = [start_date + datetime.timedelta(days=i) for i in range(30)]
             
-            # Đếm số lượng từ thuộc các mốc ngày trong database
             date_counts = {str(d): 0 for d in date_range}
             for v in user_all_data:
                 nr_date = v.get("next_review")
                 if nr_date in date_counts:
                     date_counts[nr_date] += 1
             
-            # Tạo lưới dữ liệu Heatmap dạng 5 hàng x 6 cột để hiển thị gọn
             grid_data = list(date_counts.items())
             
-            # Vẽ giao diện các ô vuông kiểu GitHub bằng cấu trúc cột HTML/Markdown của Streamlit
             st.caption("Mức độ dày đặc của từ vựng phân phối theo ngày (Màu đậm hơn = Nhiều từ cần xử lý hơn):")
             
-            # Tạo HTML cho Grid ô vuông
             html_grid = "<div style='display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; max-width: 500px;'>"
             for d_str, count in grid_data:
-                # Đổi màu ô dựa theo số lượng từ
                 if count == 0:
-                    bg_color = "#ebedf0" # Xám trống
+                    bg_color = "#ebedf0"
                     text_color = "#000000"
                 elif count <= 2:
-                    bg_color = "#9be9a8" # Xanh nhạt
+                    bg_color = "#9be9a8"
                     text_color = "#000000"
                 elif count <= 4:
-                    bg_color = "#40c463" # Xanh vừa
+                    bg_color = "#40c463"
                     text_color = "#ffffff"
                 else:
-                    bg_color = "#216e39" # Xanh đậm dữ dội
+                    bg_color = "#216e39"
                     text_color = "#ffffff"
                 
-                day_display = d_str.split("-")[2] # Chỉ lấy số ngày
+                day_display = d_str.split("-")[2]
                 html_grid += f"""
                 <div style='background-color: {bg_color}; color: {text_color}; padding: 12px; text-align: center; border-radius: 4px; font-weight: bold; font-size: 14px;' title='Ngày {d_str}: {count} từ'>
                     {day_display}
@@ -419,7 +411,6 @@ with tab4:
             st.write(html_grid, unsafe_allow_html=True)
             st.write("")
             
-        # Thống kê tổng quan dạng thẻ số Metric
         st.write("---")
         st.subheader("📈 Chỉ số tăng trưởng vựng ngữ")
         m1, m2, m3 = st.columns(3)
